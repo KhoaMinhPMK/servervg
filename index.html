@@ -22,10 +22,8 @@
   <script src="/socket.io/socket.io.js"></script>
 
   <script>
-    // Kết nối tới server. 
-    // Vì file này được phục vụ từ cùng một địa chỉ với server,
-    // chúng ta không cần truyền URL vào io().
-    const socket = io();
+    // Kết nối tường minh đến server tại địa chỉ http://localhost:3000
+    const socket = io("https://viegrand.site:3000");
 
     // Lấy các element từ HTML
     const form = document.getElementById('form');

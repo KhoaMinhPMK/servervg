@@ -1,16 +1,30 @@
 // 1. Import các thư viện cần thiết
 const express = require('express');
 const http = require('http');
-const path = require('path'); // Thêm thư viện path
+const path = require('path');
 const { Server } = require("socket.io");
+const cors = require('cors'); // *** THÊM DÒNG NÀY ***
 
-// 2. Khởi tạo các biến
+// 2. Khởi tạo
 const app = express();
+
+// *** SỬ DỤNG CORS CHO EXPRESS ***
+// Cho phép tất cả các request HTTP từ mọi nguồn
+app.use(cors());
+
 const server = http.createServer(app);
-const io = new Server(server);
+
+// *** CẤU HÌNH CORS CHO SOCKET.IO ***
+const io = new Server(server, {
+  cors: {
+    origin: "*", // Cho phép kết nối từ mọi nguồn
+    methods: ["GET", "POST"]
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
-// 3. CẬP NHẬT: Phục vụ file index.html khi truy cập vào route gốc
+// 3. Phục vụ file index.html
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -29,7 +43,9 @@ io.on('connection', (socket) => {
   });
 });
 
-// 5. Khởi động server (giữ nguyên)
-server.listen(PORT, () => {
-  console.log(`Server đang lắng nghe tại http://localhost:${PORT}`);
+// 5. Khởi động server
+// *** LẮNG NGHE TRÊN 0.0.0.0 ***
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server đang lắng nghe trên http://0.0.0.0:${PORT}`);
+  console.log('Bạn có thể truy cập từ các thiết bị khác trong cùng mạng!');
 });
