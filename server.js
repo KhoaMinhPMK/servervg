@@ -77,11 +77,11 @@ app.post('/notify', (req, res) => {
   const socketId = userSockets[to_phone];
   if (socketId) {
     io.to(socketId).emit('notification', payload);
-    debugServer(`Đã gửi thông báo cho ${to_phone} (socket: ${socketId})`);
-    res.json({ success: true, message: `Notification sent to ${to_phone}` });
+    debugServer(`📱 Thông báo real-time đã gửi cho ${to_phone} (socket: ${socketId})`);
+    res.json({ success: true, message: `Notification sent to ${to_phone}`, delivered: true });
   } else {
-    debugServer(`Lỗi: Không tìm thấy socket cho SĐT ${to_phone}`);
-    res.status(404).json({ success: false, message: `User ${to_phone} not connected` });
+    debugServer(`💾 User ${to_phone} offline, thông báo đã lưu DB để xem sau`);
+    res.json({ success: true, message: `User ${to_phone} offline, notification stored`, delivered: false });
   }
 });
 
