@@ -53,7 +53,7 @@
         const messageData = {
           sender: userPhone,
           message: input.value,
-          timestamp: new Date().toLocaleTimeString()
+          timestamp: new Date().toISOString()
         };
         
         console.log('📤 Web sending message:', messageData);
@@ -62,10 +62,11 @@
         // Hiển thị tin nhắn tự gửi ngay lập tức
         const item = document.createElement('li');
         item.style.cssText = 'background: #e8f5e8; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 4px solid #28a745;';
+        const currentTime = new Date().toLocaleTimeString();
         item.innerHTML = `
           <div><strong>👤 ${userPhone} (Bạn)</strong></div>
           <div>💬 ${input.value}</div>
-          <div style="font-size: 12px; color: #666;">⏰ ${new Date().toLocaleTimeString()}</div>
+          <div style="font-size: 12px; color: #666;">⏰ ${currentTime}</div>
         `;
         messages.appendChild(item);
         window.scrollTo(0, document.body.scrollHeight);
@@ -97,7 +98,18 @@
         // Tin nhắn có cấu trúc
         const sender = data.sender || data.senderPhone || 'Unknown';
         const message = data.message || data.messageText || data.message_text || data;
-        const time = data.timestamp || new Date().toLocaleTimeString();
+        // Xử lý timestamp
+        let time = new Date().toLocaleTimeString();
+        if (data.timestamp) {
+          try {
+            const date = new Date(data.timestamp);
+            if (!isNaN(date.getTime())) {
+              time = date.toLocaleTimeString();
+            }
+          } catch (error) {
+            console.log('⚠️ Invalid timestamp from server:', data.timestamp);
+          }
+        }
         
         item.innerHTML = `
           <div><strong>👤 ${sender}</strong></div>
