@@ -51,9 +51,61 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Event cũ - giữ lại để tương thích
   socket.on('chat message', (msg) => {
     debugSocket(`Tin nhắn từ ${socket.id}: ${msg}`);
     io.emit('chat message', msg);
+  });
+
+  // Event mới - Join conversation room
+  socket.on('join conversation', (data) => {
+    const { conversation_id } = data;
+    if (conversation_id) {
+      socket.join(conversation_id);
+      debugSocket(`User ${socket.id} joined conversation: ${conversation_id}`);
+    }
+  });
+
+  // Event mới - Send message trong conversation
+  socket.on('send message', (data) => {
+    const { conversation_id, sender_phone, receiver_phone, message_text } = data;
+    
+    debugSocket(`Send message in conversation ${conversation_id}:`, {
+      sender: sender_phone,
+      receiver: receiver_phone,
+      message: message_text
+    });
+
+    // Emit tin nhắn cho tất cả người trong room (trừ người gửi)
+    socket.to(conversation_id).emit('chat message', {
+      conversation_id,
+      sender_phone,
+      receiver_phone,
+      message_text,
+      sent_at: new Date().toISOString()
+    });
+
+    // Log để debug
+    debugSocket(`Message sent to conversation ${conversation_id}`);
+  });
+
+  // Event mới - Mark message as read
+  socket.on('mark message read', (data) => {
+    const { conversation_id, message_id, user_phone } = data;
+    
+    debugSocket(`Mark message as read:`, {
+      conversation_id,
+      message_id,
+      user_phone
+    });
+
+    // Emit cho tất cả người trong conversation
+    socket.to(conversation_id).emit('message read', {
+      conversation_id,
+      message_id,
+      read_by: user_phone,
+      read_at: new Date().toISOString()
+    });
   });
 });
 
