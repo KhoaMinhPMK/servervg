@@ -74,6 +74,9 @@ io.on('connection', (socket) => {
       
       // Gửi tin nhắn đến app (0000000001)
       const appSocketId = userSockets['0000000001'];
+      console.log('🔍 Looking for app socket:', '0000000001');
+      console.log('📋 Available users:', Object.keys(userSockets));
+      
       if (appSocketId) {
         const messageData = {
           conversationId: 'conv_1fd7e09c6c647f98a9aaabed96b60327',
@@ -83,8 +86,16 @@ io.on('connection', (socket) => {
           timestamp: timestamp
         };
         
+        console.log('📤 Sending to app socket:', appSocketId);
+        console.log('📤 Message data:', messageData);
         io.to(appSocketId).emit('chat message', messageData);
         console.log('✅ Message sent from web to app');
+        
+        // Cũng broadcast để web hiển thị
+        io.emit('chat message', messageData);
+        console.log('✅ Message also broadcasted to web');
+      } else {
+        console.log('❌ App socket not found');
       }
     }
   });
@@ -120,19 +131,23 @@ io.on('connection', (socket) => {
       timestamp: timestamp || new Date().toISOString()
     };
 
-    // Gửi tin nhắn trực tiếp đến receiver
-    const receiverSocketId = userSockets[receiverPhone];
-    console.log('🔍 Looking for receiver:', receiverPhone);
-    console.log('📋 Available users:', Object.keys(userSockets));
-    
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit('chat message', messageData);
-      debugSocket(`Message sent to ${receiverPhone} (socket: ${receiverSocketId})`);
-      console.log('✅ Message sent to receiver');
-    } else {
-      debugSocket(`Receiver ${receiverPhone} not found in userSockets`);
-      console.log('❌ Receiver not found in userSockets');
-    }
+          // Gửi tin nhắn trực tiếp đến receiver
+      const receiverSocketId = userSockets[receiverPhone];
+      console.log('🔍 Looking for receiver:', receiverPhone);
+      console.log('📋 Available users:', Object.keys(userSockets));
+      
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit('chat message', messageData);
+        debugSocket(`Message sent to ${receiverPhone} (socket: ${receiverSocketId})`);
+        console.log('✅ Message sent to receiver');
+        
+        // Cũng gửi về web để hiển thị
+        io.emit('chat message', messageData);
+        console.log('✅ Message also broadcasted to web');
+      } else {
+        debugSocket(`Receiver ${receiverPhone} not found in userSockets`);
+        console.log('❌ Receiver not found in userSockets');
+      }
 
     // Cũng emit cho conversation room nếu có
     if (conversationId) {
