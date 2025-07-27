@@ -4,6 +4,7 @@ const http = require('http');
 const path = require('path');
 const { Server } = require("socket.io");
 const cors = require('cors');
+const messageStorage = require('./messageStorage');
 
 // *** THÊM CÁC TRÌNH DEBUG ***
 const debugServer = require('debug')('app:server');
@@ -24,6 +25,9 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3000;
 const NOTIFY_SECRET = 'viegrand_super_secret_key_for_php_2025'; // <-- Secret key để PHP gọi
+
+// Khởi tạo JSON files
+messageStorage.initializeFiles();
 
 // Lưu trữ map giữa user phone và socket id
 const userSockets = {};
@@ -72,6 +76,24 @@ io.on('connection', (socket) => {
       const { sender, message, timestamp } = msg;
       debugSocket(`Tin nhắn từ ${sender}: ${message}`);
       
+      // Lưu tin nhắn từ web vào JSON
+      const savedMessage = messageStorage.saveMessage({
+        conversationId: 'conv_1fd7e09c6c647f98a9aaabed96b60327',
+        senderPhone: sender,
+        receiverPhone: '0000000001',
+        messageText: message,
+        timestamp
+      });
+
+      // Lưu conversation vào JSON
+      messageStorage.saveConversation({
+        conversationId: 'conv_1fd7e09c6c647f98a9aaabed96b60327',
+        senderPhone: sender,
+        receiverPhone: '0000000001',
+        messageText: message,
+        timestamp
+      });
+      
       // Gửi tin nhắn đến app (0000000001)
       const appSocketId = userSockets['0000000001'];
       if (appSocketId) {
@@ -110,6 +132,24 @@ io.on('connection', (socket) => {
       sender: senderPhone,
       receiver: receiverPhone,
       message: messageText
+    });
+
+    // Lưu tin nhắn vào JSON
+    const savedMessage = messageStorage.saveMessage({
+      conversationId,
+      senderPhone,
+      receiverPhone,
+      messageText,
+      timestamp
+    });
+
+    // Lưu conversation vào JSON
+    messageStorage.saveConversation({
+      conversationId,
+      senderPhone,
+      receiverPhone,
+      messageText,
+      timestamp
     });
 
     // Tạo tin nhắn để gửi
@@ -169,7 +209,18 @@ io.on('connection', (socket) => {
   });
 });
 
-// 4. Endpoint để PHP gọi đến và kích hoạt thông báo
+// 4. Debug endpoints để xem JSON data
+app.get('/debug/messages', (req, res) => {
+  const messages = messageStorage.debugAllMessages();
+  res.json({ success: true, messages });
+});
+
+app.get('/debug/conversations', (req, res) => {
+  const conversations = messageStorage.debugAllConversations();
+  res.json({ success: true, conversations });
+});
+
+// 5. Endpoint để PHP gọi đến và kích hoạt thông báo
 app.post('/notify', (req, res) => {
   const { to_phone, payload, secret } = req.body;
 
