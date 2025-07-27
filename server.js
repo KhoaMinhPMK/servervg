@@ -91,9 +91,7 @@ io.on('connection', (socket) => {
         io.to(appSocketId).emit('chat message', messageData);
         console.log('✅ Message sent from web to app');
         
-        // Cũng broadcast để web hiển thị
-        io.emit('chat message', messageData);
-        console.log('✅ Message also broadcasted to web');
+        // Không broadcast để tránh duplicate
       } else {
         console.log('❌ App socket not found');
       }
@@ -106,6 +104,7 @@ io.on('connection', (socket) => {
     if (conversation_id) {
       socket.join(conversation_id);
       debugSocket(`User ${socket.id} joined conversation: ${conversation_id}`);
+      console.log('🔗 User joined conversation room:', conversation_id);
     }
   });
 
@@ -140,20 +139,13 @@ io.on('connection', (socket) => {
         io.to(receiverSocketId).emit('chat message', messageData);
         debugSocket(`Message sent to ${receiverPhone} (socket: ${receiverSocketId})`);
         console.log('✅ Message sent to receiver');
-        
-        // Cũng gửi về web để hiển thị
-        io.emit('chat message', messageData);
-        console.log('✅ Message also broadcasted to web');
       } else {
         debugSocket(`Receiver ${receiverPhone} not found in userSockets`);
         console.log('❌ Receiver not found in userSockets');
       }
 
-    // Cũng emit cho conversation room nếu có
-    if (conversationId) {
-      socket.to(conversationId).emit('chat message', messageData);
-      debugSocket(`Message also sent to conversation room: ${conversationId}`);
-    }
+    // Không emit cho conversation room để tránh duplicate
+    // Chỉ gửi trực tiếp đến receiver
   });
 
   // Event mới - Mark message as read
