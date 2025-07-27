@@ -14,32 +14,12 @@ const app = express();
 app.use(cors());
 app.use(express.json()); // <-- Thêm middleware để parse JSON body từ PHP
 
-// Serve static files
-app.use(express.static(path.join(__dirname)));
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    connectedUsers: Object.keys(userSockets).length
-  });
-});
-
-// Default route - serve chat page
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"],
-    credentials: true
-  },
-  allowEIO3: true,
-  transports: ['websocket', 'polling']
+    methods: ["GET", "POST"]
+  }
 });
 
 const PORT = process.env.PORT || 3000;
@@ -100,12 +80,11 @@ io.on('connection', (socket) => {
           sender: sender,
           receiver: '0000000001',
           message: message,
-          messageText: message, // Thêm field này cho app
           timestamp: timestamp
         };
         
         io.to(appSocketId).emit('chat message', messageData);
-        console.log('✅ Message sent from web to app with format:', messageData);
+        console.log('✅ Message sent from web to app');
       }
     }
   });
@@ -116,15 +95,6 @@ io.on('connection', (socket) => {
     if (conversation_id) {
       socket.join(conversation_id);
       debugSocket(`User ${socket.id} joined conversation: ${conversation_id}`);
-    }
-  });
-
-  // Heartbeat để giữ kết nối
-  socket.on('heartbeat', (data) => {
-    const { phone } = data;
-    if (phone && userSockets[phone] === socket.id) {
-      console.log(`💓 Heartbeat from ${phone}`);
-      socket.emit('heartbeat_ack', { timestamp: Date.now() });
     }
   });
 
@@ -156,16 +126,9 @@ io.on('connection', (socket) => {
     console.log('📋 Available users:', Object.keys(userSockets));
     
     if (receiverSocketId) {
-      // Gửi với format đơn giản cho web
-      const simpleMessage = {
-        sender: senderPhone,
-        message: messageText,
-        timestamp: timestamp || new Date().toISOString()
-      };
-      
-      io.to(receiverSocketId).emit('chat message', simpleMessage);
+      io.to(receiverSocketId).emit('chat message', messageData);
       debugSocket(`Message sent to ${receiverPhone} (socket: ${receiverSocketId})`);
-      console.log('✅ Message sent to receiver with format:', simpleMessage);
+      console.log('✅ Message sent to receiver');
     } else {
       debugSocket(`Receiver ${receiverPhone} not found in userSockets`);
       console.log('❌ Receiver not found in userSockets');
