@@ -39,6 +39,14 @@
     console.log("📞 Đăng ký với số điện thoại:", userPhone);
     socket.emit('register', userPhone);
     
+    // Heartbeat để giữ kết nối
+    setInterval(() => {
+      if (socket.connected) {
+        socket.emit('heartbeat', { phone: userPhone, timestamp: Date.now() });
+        console.log("💓 Heartbeat sent");
+      }
+    }, 30000); // Gửi heartbeat mỗi 30 giây
+    
     // Lấy các element từ HTML
     const form = document.getElementById('form');
     const input = document.getElementById('input');
@@ -119,6 +127,10 @@
       // Đăng ký lại sau khi kết nối
       socket.emit('register', userPhone);
       console.log("📞 Đăng ký lại với số điện thoại:", userPhone);
+      
+      // Log connection state
+      console.log("🔍 Socket connected:", socket.connected);
+      console.log("🔍 Socket id:", socket.id);
     });
 
     socket.on('connect_error', function(error) {
@@ -129,6 +141,17 @@
     socket.on('disconnect', function(reason) {
       console.log("🔌 Ngắt kết nối socket:", reason);
       statusDiv.innerHTML = `<h3>📱 Người dùng: ${userPhone}</h3><p>🟡 Đã ngắt kết nối: ${reason}</p>`;
+      
+      // Auto reconnect sau 3 giây
+      setTimeout(() => {
+        console.log("🔄 Đang thử kết nối lại...");
+        socket.connect();
+      }, 3000);
+    });
+
+    // Heartbeat acknowledgment
+    socket.on('heartbeat_ack', function(data) {
+      console.log("💓 Heartbeat ACK received:", data);
     });
     
     socket.on('disconnect', function() {

@@ -115,6 +115,15 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Heartbeat để giữ kết nối
+  socket.on('heartbeat', (data) => {
+    const { phone } = data;
+    if (phone && userSockets[phone] === socket.id) {
+      console.log(`💓 Heartbeat from ${phone}`);
+      socket.emit('heartbeat_ack', { timestamp: Date.now() });
+    }
+  });
+
   // Event mới - Send message trong conversation
   socket.on('send message', (data) => {
     console.log('🔍 Server received send message data:', data);
