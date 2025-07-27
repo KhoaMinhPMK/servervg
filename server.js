@@ -61,8 +61,32 @@ io.on('connection', (socket) => {
 
   // Event cũ - giữ lại để tương thích
   socket.on('chat message', (msg) => {
-    debugSocket(`Tin nhắn từ ${socket.id}: ${msg}`);
-    io.emit('chat message', msg);
+    console.log('🔍 Server received chat message:', msg);
+    
+    if (typeof msg === 'string') {
+      // Tin nhắn đơn giản
+      debugSocket(`Tin nhắn từ ${socket.id}: ${msg}`);
+      io.emit('chat message', msg);
+    } else {
+      // Tin nhắn có cấu trúc từ web
+      const { sender, message, timestamp } = msg;
+      debugSocket(`Tin nhắn từ ${sender}: ${message}`);
+      
+      // Gửi tin nhắn đến app (0000000001)
+      const appSocketId = userSockets['0000000001'];
+      if (appSocketId) {
+        const messageData = {
+          conversationId: 'conv_1fd7e09c6c647f98a9aaabed96b60327',
+          sender: sender,
+          receiver: '0000000001',
+          message: message,
+          timestamp: timestamp
+        };
+        
+        io.to(appSocketId).emit('chat message', messageData);
+        console.log('✅ Message sent from web to app');
+      }
+    }
   });
 
   // Event mới - Join conversation room

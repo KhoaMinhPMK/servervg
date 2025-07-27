@@ -30,9 +30,9 @@
     
     console.log("🔗 Kết nối socket với số điện thoại:", userPhone);
     
-    // Đăng ký với server
-    socket.emit('register', userPhone);
+    // Đăng ký với server ngay khi script load
     console.log("📞 Đăng ký với số điện thoại:", userPhone);
+    socket.emit('register', userPhone);
     
     // Lấy các element từ HTML
     const form = document.getElementById('form');
@@ -50,11 +50,14 @@
       e.preventDefault();
       if (input.value) {
         // Gửi tin nhắn test
-        socket.emit('chat message', {
+        const messageData = {
           sender: userPhone,
           message: input.value,
           timestamp: new Date().toLocaleTimeString()
-        });
+        };
+        
+        console.log('📤 Web sending message:', messageData);
+        socket.emit('chat message', messageData);
         input.value = '';
       }
     });
