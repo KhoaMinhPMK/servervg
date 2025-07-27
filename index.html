@@ -19,7 +19,7 @@
     <input id="input" autocomplete="off" /><button>Gửi</button>
   </form>
 
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
   <script>
     // Kết nối đến server
@@ -54,8 +54,13 @@
     
     // Hiển thị thông tin kết nối
     const statusDiv = document.createElement('div');
-    statusDiv.innerHTML = `<h3>📱 Người dùng: ${userPhone}</h3><p>🟢 Đã kết nối socket</p>`;
-    statusDiv.style.cssText = 'background: #e8f5e8; padding: 10px; margin: 10px; border-radius: 5px;';
+    statusDiv.innerHTML = `
+      <h3>📱 Người dùng: ${userPhone}</h3>
+      <p>🟢 Đang kết nối...</p>
+      <p>🔗 Server: https://chat.viegrand.site</p>
+      <p>📊 Socket ID: <span id="socket-id">Đang kết nối...</span></p>
+    `;
+    statusDiv.style.cssText = 'background: #e8f5e8; padding: 10px; margin: 10px; border-radius: 5px; border: 2px solid #4CAF50;';
     document.body.insertBefore(statusDiv, messages);
 
     // Khi form được gửi đi
@@ -122,7 +127,21 @@
     // Hiển thị trạng thái kết nối
     socket.on('connect', function() {
       console.log("✅ Đã kết nối socket với ID:", socket.id);
-      statusDiv.innerHTML = `<h3>📱 Người dùng: ${userPhone}</h3><p>🟢 Đã kết nối socket (ID: ${socket.id})</p>`;
+      
+      // Cập nhật status
+      const socketIdSpan = document.getElementById('socket-id');
+      if (socketIdSpan) {
+        socketIdSpan.textContent = socket.id;
+      }
+      
+      statusDiv.innerHTML = `
+        <h3>📱 Người dùng: ${userPhone}</h3>
+        <p>🟢 Đã kết nối thành công!</p>
+        <p>🔗 Server: https://chat.viegrand.site</p>
+        <p>📊 Socket ID: <span id="socket-id">${socket.id}</span></p>
+        <p>⏰ Thời gian: ${new Date().toLocaleTimeString()}</p>
+      `;
+      statusDiv.style.cssText = 'background: #e8f5e8; padding: 10px; margin: 10px; border-radius: 5px; border: 2px solid #4CAF50;';
       
       // Đăng ký lại sau khi kết nối
       socket.emit('register', userPhone);
@@ -135,12 +154,27 @@
 
     socket.on('connect_error', function(error) {
       console.log("❌ Lỗi kết nối socket:", error);
-      statusDiv.innerHTML = `<h3>📱 Người dùng: ${userPhone}</h3><p>🔴 Lỗi kết nối: ${error.message}</p>`;
+      statusDiv.innerHTML = `
+        <h3>📱 Người dùng: ${userPhone}</h3>
+        <p>🔴 Lỗi kết nối!</p>
+        <p>🔗 Server: https://chat.viegrand.site</p>
+        <p>❌ Lỗi: ${error.message}</p>
+        <p>⏰ Thời gian: ${new Date().toLocaleTimeString()}</p>
+      `;
+      statusDiv.style.cssText = 'background: #ffebee; padding: 10px; margin: 10px; border-radius: 5px; border: 2px solid #f44336;';
     });
 
     socket.on('disconnect', function(reason) {
       console.log("🔌 Ngắt kết nối socket:", reason);
-      statusDiv.innerHTML = `<h3>📱 Người dùng: ${userPhone}</h3><p>🟡 Đã ngắt kết nối: ${reason}</p>`;
+      statusDiv.innerHTML = `
+        <h3>📱 Người dùng: ${userPhone}</h3>
+        <p>🟡 Đã ngắt kết nối!</p>
+        <p>🔗 Server: https://chat.viegrand.site</p>
+        <p>📊 Lý do: ${reason}</p>
+        <p>⏰ Thời gian: ${new Date().toLocaleTimeString()}</p>
+        <p>🔄 Tự động kết nối lại sau 3 giây...</p>
+      `;
+      statusDiv.style.cssText = 'background: #fff3e0; padding: 10px; margin: 10px; border-radius: 5px; border: 2px solid #ff9800;';
       
       // Auto reconnect sau 3 giây
       setTimeout(() => {

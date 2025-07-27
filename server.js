@@ -14,17 +14,21 @@ const app = express();
 app.use(cors());
 app.use(express.json()); // <-- Thêm middleware để parse JSON body từ PHP
 
-// Thêm route để test server
-app.get('/', (req, res) => {
-  res.send('Viegrand Chat Server is running!');
-});
+// Serve static files
+app.use(express.static(path.join(__dirname)));
 
+// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
     connectedUsers: Object.keys(userSockets).length
   });
+});
+
+// Default route - serve chat page
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 const server = http.createServer(app);
