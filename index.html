@@ -74,9 +74,9 @@
         item.textContent = `📨 ${data}`;
       } else {
         // Tin nhắn có cấu trúc
-        const sender = data.sender || 'Unknown';
-        const message = data.message || data.message_text || data;
-        const time = data.timestamp || new Date().toLocaleTimeString();
+        const sender = data.sender || data.senderPhone || 'Unknown';
+        const message = data.message || data.messageText || data.message_text || data;
+        const time = data.timestamp || data.sent_at || new Date().toLocaleTimeString();
         
         item.innerHTML = `
           <div><strong>👤 ${sender}</strong></div>

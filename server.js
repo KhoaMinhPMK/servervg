@@ -80,11 +80,12 @@ io.on('connection', (socket) => {
           sender: sender,
           receiver: '0000000001',
           message: message,
+          messageText: message, // Thêm field này cho app
           timestamp: timestamp
         };
         
         io.to(appSocketId).emit('chat message', messageData);
-        console.log('✅ Message sent from web to app');
+        console.log('✅ Message sent from web to app with format:', messageData);
       }
     }
   });
@@ -126,9 +127,16 @@ io.on('connection', (socket) => {
     console.log('📋 Available users:', Object.keys(userSockets));
     
     if (receiverSocketId) {
-      io.to(receiverSocketId).emit('chat message', messageData);
+      // Gửi với format đơn giản cho web
+      const simpleMessage = {
+        sender: senderPhone,
+        message: messageText,
+        timestamp: timestamp || new Date().toISOString()
+      };
+      
+      io.to(receiverSocketId).emit('chat message', simpleMessage);
       debugSocket(`Message sent to ${receiverPhone} (socket: ${receiverSocketId})`);
-      console.log('✅ Message sent to receiver');
+      console.log('✅ Message sent to receiver with format:', simpleMessage);
     } else {
       debugSocket(`Receiver ${receiverPhone} not found in userSockets`);
       console.log('❌ Receiver not found in userSockets');
