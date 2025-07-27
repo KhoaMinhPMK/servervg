@@ -68,25 +68,38 @@ io.on('connection', (socket) => {
 
   // Event mới - Send message trong conversation
   socket.on('send message', (data) => {
-    const { conversation_id, sender_phone, receiver_phone, message_text } = data;
+    const { conversationId, senderPhone, receiverPhone, messageText, timestamp } = data;
     
-    debugSocket(`Send message in conversation ${conversation_id}:`, {
-      sender: sender_phone,
-      receiver: receiver_phone,
-      message: message_text
+    debugSocket(`Send message from ${senderPhone} to ${receiverPhone}:`, {
+      conversationId,
+      sender: senderPhone,
+      receiver: receiverPhone,
+      message: messageText
     });
 
-    // Emit tin nhắn cho tất cả người trong room (trừ người gửi)
-    socket.to(conversation_id).emit('chat message', {
-      conversation_id,
-      sender_phone,
-      receiver_phone,
-      message_text,
-      sent_at: new Date().toISOString()
-    });
+    // Tạo tin nhắn để gửi
+    const messageData = {
+      conversationId,
+      sender: senderPhone,
+      receiver: receiverPhone,
+      message: messageText,
+      timestamp: timestamp || new Date().toISOString()
+    };
 
-    // Log để debug
-    debugSocket(`Message sent to conversation ${conversation_id}`);
+    // Gửi tin nhắn trực tiếp đến receiver
+    const receiverSocketId = userSockets[receiverPhone];
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit('chat message', messageData);
+      debugSocket(`Message sent to ${receiverPhone} (socket: ${receiverSocketId})`);
+    } else {
+      debugSocket(`Receiver ${receiverPhone} not found in userSockets`);
+    }
+
+    // Cũng emit cho conversation room nếu có
+    if (conversationId) {
+      socket.to(conversationId).emit('chat message', messageData);
+      debugSocket(`Message also sent to conversation room: ${conversationId}`);
+    }
   });
 
   // Event mới - Mark message as read

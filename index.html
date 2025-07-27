@@ -22,30 +22,93 @@
   <script src="/socket.io/socket.io.js"></script>
 
   <script>
-    // Kết nối tường minh đến server tại địa chỉ http://localhost:3000
+    // Kết nối đến server
     const socket = io("https://chat.viegrand.site");
-
+    
+    // Đăng ký với số điện thoại 0000000003
+    const userPhone = "0000000003";
+    
+    console.log("🔗 Kết nối socket với số điện thoại:", userPhone);
+    
+    // Đăng ký với server
+    socket.emit('register', { phone: userPhone });
+    
     // Lấy các element từ HTML
     const form = document.getElementById('form');
     const input = document.getElementById('input');
     const messages = document.getElementById('messages');
+    
+    // Hiển thị thông tin kết nối
+    const statusDiv = document.createElement('div');
+    statusDiv.innerHTML = `<h3>📱 Người dùng: ${userPhone}</h3><p>🟢 Đã kết nối socket</p>`;
+    statusDiv.style.cssText = 'background: #e8f5e8; padding: 10px; margin: 10px; border-radius: 5px;';
+    document.body.insertBefore(statusDiv, messages);
 
     // Khi form được gửi đi
     form.addEventListener('submit', function(e) {
-      e.preventDefault(); // Ngăn trang tải lại
+      e.preventDefault();
       if (input.value) {
-        // Gửi sự kiện 'chat message' cùng nội dung input tới server
-        socket.emit('chat message', input.value);
-        input.value = ''; // Xóa nội dung trong ô input
+        // Gửi tin nhắn test
+        socket.emit('chat message', {
+          sender: userPhone,
+          message: input.value,
+          timestamp: new Date().toLocaleTimeString()
+        });
+        input.value = '';
       }
     });
 
-    // Lắng nghe sự kiện 'chat message' từ server
-    socket.on('chat message', function(msg) {
+    // Lắng nghe tin nhắn từ app
+    socket.on('chat message', function(data) {
+      console.log("📨 Nhận tin nhắn:", data);
+      
       const item = document.createElement('li');
-      item.textContent = msg;
+      item.style.cssText = 'background: #f0f8ff; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 4px solid #007bff;';
+      
+      if (typeof data === 'string') {
+        // Tin nhắn đơn giản
+        item.textContent = `📨 ${data}`;
+      } else {
+        // Tin nhắn có cấu trúc
+        const sender = data.sender || 'Unknown';
+        const message = data.message || data.message_text || data;
+        const time = data.timestamp || new Date().toLocaleTimeString();
+        
+        item.innerHTML = `
+          <div><strong>👤 ${sender}</strong></div>
+          <div>💬 ${message}</div>
+          <div style="font-size: 12px; color: #666;">⏰ ${time}</div>
+        `;
+      }
+      
       messages.appendChild(item);
-      window.scrollTo(0, document.body.scrollHeight); // Cuộn xuống tin nhắn mới nhất
+      window.scrollTo(0, document.body.scrollHeight);
+    });
+    
+    // Lắng nghe notification
+    socket.on('notification', function(data) {
+      console.log("🔔 Nhận notification:", data);
+      
+      const item = document.createElement('li');
+      item.style.cssText = 'background: #fff3cd; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 4px solid #ffc107;';
+      item.innerHTML = `
+        <div><strong>🔔 Notification</strong></div>
+        <div>${JSON.stringify(data, null, 2)}</div>
+      `;
+      
+      messages.appendChild(item);
+      window.scrollTo(0, document.body.scrollHeight);
+    });
+    
+    // Hiển thị trạng thái kết nối
+    socket.on('connect', function() {
+      console.log("✅ Đã kết nối socket");
+      statusDiv.innerHTML = `<h3>📱 Người dùng: ${userPhone}</h3><p>🟢 Đã kết nối socket (ID: ${socket.id})</p>`;
+    });
+    
+    socket.on('disconnect', function() {
+      console.log("❌ Mất kết nối socket");
+      statusDiv.innerHTML = `<h3>📱 Người dùng: ${userPhone}</h3><p>🔴 Mất kết nối socket</p>`;
     });
   </script>
 </body>
