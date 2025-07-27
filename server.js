@@ -34,9 +34,17 @@ io.on('connection', (socket) => {
 
   // Sự kiện đăng ký user với SĐT
   socket.on('register', (phone) => {
+    console.log('🔍 Server received register:', phone, typeof phone);
+    
     if (phone) {
-      userSockets[phone] = socket.id;
-      debugSocket(`Người dùng với SĐT ${phone} đã đăng ký với socket id ${socket.id}`);
+      // Xử lý cả object và string
+      const phoneNumber = typeof phone === 'object' ? phone.phone : phone;
+      
+      if (phoneNumber) {
+        userSockets[phoneNumber] = socket.id;
+        debugSocket(`Người dùng với SĐT ${phoneNumber} đã đăng ký với socket id ${socket.id}`);
+        console.log('📋 Current userSockets:', userSockets);
+      }
     }
   });
 
@@ -68,6 +76,8 @@ io.on('connection', (socket) => {
 
   // Event mới - Send message trong conversation
   socket.on('send message', (data) => {
+    console.log('🔍 Server received send message data:', data);
+    
     const { conversationId, senderPhone, receiverPhone, messageText, timestamp } = data;
     
     debugSocket(`Send message from ${senderPhone} to ${receiverPhone}:`, {
@@ -88,11 +98,16 @@ io.on('connection', (socket) => {
 
     // Gửi tin nhắn trực tiếp đến receiver
     const receiverSocketId = userSockets[receiverPhone];
+    console.log('🔍 Looking for receiver:', receiverPhone);
+    console.log('📋 Available users:', Object.keys(userSockets));
+    
     if (receiverSocketId) {
       io.to(receiverSocketId).emit('chat message', messageData);
       debugSocket(`Message sent to ${receiverPhone} (socket: ${receiverSocketId})`);
+      console.log('✅ Message sent to receiver');
     } else {
       debugSocket(`Receiver ${receiverPhone} not found in userSockets`);
+      console.log('❌ Receiver not found in userSockets');
     }
 
     // Cũng emit cho conversation room nếu có

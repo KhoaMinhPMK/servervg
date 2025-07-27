@@ -31,7 +31,8 @@
     console.log("🔗 Kết nối socket với số điện thoại:", userPhone);
     
     // Đăng ký với server
-    socket.emit('register', { phone: userPhone });
+    socket.emit('register', userPhone);
+    console.log("📞 Đăng ký với số điện thoại:", userPhone);
     
     // Lấy các element từ HTML
     const form = document.getElementById('form');
@@ -102,8 +103,12 @@
     
     // Hiển thị trạng thái kết nối
     socket.on('connect', function() {
-      console.log("✅ Đã kết nối socket");
+      console.log("✅ Đã kết nối socket với ID:", socket.id);
       statusDiv.innerHTML = `<h3>📱 Người dùng: ${userPhone}</h3><p>🟢 Đã kết nối socket (ID: ${socket.id})</p>`;
+      
+      // Đăng ký lại sau khi kết nối
+      socket.emit('register', userPhone);
+      console.log("📞 Đăng ký lại với số điện thoại:", userPhone);
     });
     
     socket.on('disconnect', function() {
