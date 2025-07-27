@@ -23,7 +23,12 @@
 
   <script>
     // Kết nối đến server
-    const socket = io("https://chat.viegrand.site");
+    const socket = io("https://chat.viegrand.site", {
+      transports: ['websocket', 'polling'],
+      upgrade: true,
+      rememberUpgrade: true,
+      timeout: 20000
+    });
     
     // Đăng ký với số điện thoại 0000000003
     const userPhone = "0000000003";
@@ -65,6 +70,8 @@
     // Lắng nghe tin nhắn từ app
     socket.on('chat message', function(data) {
       console.log("📨 Nhận tin nhắn:", data);
+      console.log("📨 Kiểu dữ liệu:", typeof data);
+      console.log("📨 Chi tiết:", JSON.stringify(data, null, 2));
       
       const item = document.createElement('li');
       item.style.cssText = 'background: #f0f8ff; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 4px solid #007bff;';
@@ -112,6 +119,16 @@
       // Đăng ký lại sau khi kết nối
       socket.emit('register', userPhone);
       console.log("📞 Đăng ký lại với số điện thoại:", userPhone);
+    });
+
+    socket.on('connect_error', function(error) {
+      console.log("❌ Lỗi kết nối socket:", error);
+      statusDiv.innerHTML = `<h3>📱 Người dùng: ${userPhone}</h3><p>🔴 Lỗi kết nối: ${error.message}</p>`;
+    });
+
+    socket.on('disconnect', function(reason) {
+      console.log("🔌 Ngắt kết nối socket:", reason);
+      statusDiv.innerHTML = `<h3>📱 Người dùng: ${userPhone}</h3><p>🟡 Đã ngắt kết nối: ${reason}</p>`;
     });
     
     socket.on('disconnect', function() {

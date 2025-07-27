@@ -14,12 +14,28 @@ const app = express();
 app.use(cors());
 app.use(express.json()); // <-- Thêm middleware để parse JSON body từ PHP
 
+// Thêm route để test server
+app.get('/', (req, res) => {
+  res.send('Viegrand Chat Server is running!');
+});
+
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    connectedUsers: Object.keys(userSockets).length
+  });
+});
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"]
-  }
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  allowEIO3: true,
+  transports: ['websocket', 'polling']
 });
 
 const PORT = process.env.PORT || 3000;
