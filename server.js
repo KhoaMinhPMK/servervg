@@ -215,21 +215,37 @@ const Groq = require('groq-sdk');
 
 app.post('/api/groq-image-chat', upload.single('image'), async (req, res) => {
   try {
+    console.log('🔍 Received Groq image chat request');
+    console.log('📋 Request body:', req.body);
+    console.log('📁 Uploaded file:', req.file);
+    
     const prompt = req.body.prompt;
     const imageFile = req.file;
     const apiKey = req.body.apiKey;
+    
+    console.log('✅ Prompt:', prompt);
+    console.log('✅ API Key length:', apiKey ? apiKey.length : 0);
+    console.log('✅ Image file:', imageFile ? 'Present' : 'Missing');
+    
     if (!prompt || !imageFile || !apiKey) {
+      console.log('❌ Validation failed - missing required fields');
       return res.status(400).json({ error: 'Missing prompt, image, or API key' });
     }
+    
+    console.log('🔄 Converting image to base64...');
     // Convert image to base64 URL
     const imageBuffer = fs.readFileSync(imageFile.path);
     const base64 = imageBuffer.toString('base64');
     const mimeType = imageFile.mimetype;
     const imageUrl = `data:${mimeType};base64,${base64}`;
+    console.log('✅ Image converted, size:', imageBuffer.length, 'bytes');
 
+    console.log('🔑 Creating Groq client...');
     // Create Groq client with user's API key
     const groq = new Groq({ apiKey: apiKey });
+    console.log('✅ Groq client created');
 
+    console.log('🚀 Calling Groq API...');
     // Call Groq API
     const chatCompletion = await groq.chat.completions.create({
       messages: [
@@ -248,11 +264,16 @@ app.post('/api/groq-image-chat', upload.single('image'), async (req, res) => {
       stream: false,
       stop: null
     });
+    console.log('✅ Groq API response received');
+    
     // Clean up uploaded file
     fs.unlinkSync(imageFile.path);
+    console.log('✅ File cleaned up');
+    
     res.json({ result: chatCompletion.choices[0].message.content });
   } catch (err) {
-    console.error('Groq image chat error:', err);
+    console.error('❌ Groq image chat error:', err);
+    console.error('❌ Error stack:', err.stack);
     res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });
