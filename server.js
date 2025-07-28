@@ -201,6 +201,58 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// 7. Serve Groq image+prompt chat page
+app.get('/groq-image-chat', (req, res) => {
+  res.sendFile(path.join(__dirname, 'groq-image-chat.html'));
+});
+
+// 8. API endpoint for Groq image+prompt chat
+const multer = require('multer');
+const upload = multer({ dest: 'uploads/' });
+const fs = require('fs');
+const Groq = require('groq-sdk');
+const groq = new Groq();
+
+app.post('/api/groq-image-chat', upload.single('image'), async (req, res) => {
+  try {
+    const prompt = req.body.prompt;
+    const imageFile = req.file;
+    if (!prompt || !imageFile) {
+      return res.status(400).json({ error: 'Missing prompt or image' });
+    }
+    // Convert image to base64 URL
+    const imageBuffer = fs.readFileSync(imageFile.path);
+    const base64 = imageBuffer.toString('base64');
+    const mimeType = imageFile.mimetype;
+    const imageUrl = `data:${mimeType};base64,${base64}`;
+
+    // Call Groq API
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: imageUrl } }
+          ]
+        }
+      ],
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      temperature: 1,
+      max_completion_tokens: 1024,
+      top_p: 1,
+      stream: false,
+      stop: null
+    });
+    // Clean up uploaded file
+    fs.unlinkSync(imageFile.path);
+    res.json({ result: chatCompletion.choices[0].message.content });
+  } catch (err) {
+    console.error('Groq image chat error:', err);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+});
+
 // 6. Khởi động server
 server.listen(PORT, '0.0.0.0', () => {
   debugServer(`Server đang lắng nghe trên http://0.0.0.0:${PORT}`);
