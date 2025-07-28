@@ -47,6 +47,7 @@ io.on('connection', (socket) => {
       }
     }
   });
+  
 
   socket.on('disconnect', () => {
     // Xóa user khỏi map khi họ ngắt kết nối
@@ -199,6 +200,218 @@ app.post('/notify', (req, res) => {
 // 5. Phục vụ file index.html
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// 7. Serve Groq image+prompt chat page
+app.get('/groq-image-chat', (req, res) => {
+  res.sendFile(path.join(__dirname, 'groq-image-chat.html'));
+});
+
+// 8. API endpoint for Groq image+prompt chat (FormData for web)
+const multer = require('multer');
+const upload = multer({ dest: 'uploads/' });
+const fs = require('fs');
+const Groq = require('groq-sdk');
+
+app.post('/api/groq-image-chat', upload.single('image'), async (req, res) => {
+  try {
+    console.log('🔍 Received Groq image chat request (FormData)');
+    console.log('📋 Request body:', req.body);
+    console.log('📁 Uploaded file:', req.file);
+    
+    const prompt = req.body.prompt;
+    const imageFile = req.file;
+    const apiKey = req.body.apiKey;
+    
+    console.log('✅ Prompt:', prompt);
+    console.log('✅ API Key length:', apiKey ? apiKey.length : 0);
+    console.log('✅ Image file:', imageFile ? 'Present' : 'Missing');
+    
+    if (!imageFile || !apiKey) {
+      console.log('❌ Validation failed - missing required fields');
+      return res.status(400).json({ error: 'Missing image or API key' });
+    }
+    
+    // Validate API key format
+    if (!apiKey.startsWith('gsk_')) {
+      console.log('❌ Invalid API key format - should start with gsk_');
+      return res.status(400).json({ error: 'Invalid API key format. Should start with gsk_' });
+    }
+    
+    console.log('🔄 Converting image to base64...');
+    // Convert image to base64 URL
+    const imageBuffer = fs.readFileSync(imageFile.path);
+    const base64 = imageBuffer.toString('base64');
+    const mimeType = imageFile.mimetype;
+    const imageUrl = `data:${mimeType};base64,${base64}`;
+    console.log('✅ Image converted, size:', imageBuffer.length, 'bytes');
+
+    console.log('🔑 Creating Groq client...');
+    // Create Groq client with user's API key
+    const groq = new Groq({ apiKey: apiKey });
+    console.log('✅ Groq client created');
+
+    console.log('🚀 Calling Groq API...');
+    // Call Groq API
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Liệt kê các chỉ số trong máy đo huyết áp/nhịp tim. Trả về kết quả dưới dạng JSON với format chính xác như sau:\n{\n  "huyet_ap_tam_thu": "số lượng mmHg",\n  "huyet_ap_tam_truong": "số lượng mmHg",\n  "nhip_tim": "số lượng bpm"\n}\n\nChỉ trả về JSON, không có text khác.' },
+            { type: 'image_url', image_url: { url: imageUrl } }
+          ]
+        }
+      ],
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      temperature: 0.1,
+      max_completion_tokens: 1024,
+      top_p: 1,
+      stream: false,
+      stop: null
+    });
+    console.log('✅ Groq API response received');
+    
+    // Clean up uploaded file
+    fs.unlinkSync(imageFile.path);
+    console.log('✅ File cleaned up');
+    
+    // Parse JSON response
+    try {
+      const jsonResponse = JSON.parse(chatCompletion.choices[0].message.content);
+      console.log('✅ Parsed JSON response:', jsonResponse);
+      res.json({ 
+        success: true,
+        data: jsonResponse,
+        raw: chatCompletion.choices[0].message.content 
+      });
+    } catch (parseError) {
+      console.log('⚠️ Failed to parse JSON, returning raw response');
+      res.json({ 
+        success: false,
+        raw: chatCompletion.choices[0].message.content,
+        error: 'Could not parse JSON response'
+      });
+    }
+  } catch (err) {
+    console.error('❌ Groq image chat error:', err);
+    console.error('❌ Error stack:', err.stack);
+    
+    // Handle specific Groq API errors
+    if (err.status === 401) {
+      return res.status(401).json({ 
+        error: 'Invalid API key. Please check your Groq API key.',
+        details: 'Make sure your API key is correct and has sufficient credits.'
+      });
+    } else if (err.status === 429) {
+      return res.status(429).json({ 
+        error: 'Rate limit exceeded. Please try again later.',
+        details: 'You have exceeded the API rate limit.'
+      });
+    } else if (err.status === 400) {
+      return res.status(400).json({ 
+        error: 'Bad request to Groq API.',
+        details: err.message
+      });
+    }
+    
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+});
+
+// 9. API endpoint for React Native app (JSON with base64)
+app.post('/api/groq-image-chat-json', async (req, res) => {
+  try {
+    console.log('🔍 Received Groq image chat request (JSON)');
+    console.log('📋 Request body keys:', Object.keys(req.body));
+    
+    const { apiKey, image: base64Image } = req.body;
+    
+    console.log('✅ API Key length:', apiKey ? apiKey.length : 0);
+    console.log('✅ Base64 image length:', base64Image ? base64Image.length : 0);
+    
+    if (!base64Image || !apiKey) {
+      console.log('❌ Validation failed - missing required fields');
+      return res.status(400).json({ error: 'Missing image or API key' });
+    }
+    
+    // Validate API key format
+    if (!apiKey.startsWith('gsk_')) {
+      console.log('❌ Invalid API key format - should start with gsk_');
+      return res.status(400).json({ error: 'Invalid API key format. Should start with gsk_' });
+    }
+    
+    console.log('🔄 Using base64 image directly...');
+    const imageUrl = `data:image/jpeg;base64,${base64Image}`;
+    console.log('✅ Image URL created, size:', base64Image.length, 'bytes');
+
+    console.log('🔑 Creating Groq client...');
+    // Create Groq client with user's API key
+    const groq = new Groq({ apiKey: apiKey });
+    console.log('✅ Groq client created');
+
+    console.log('🚀 Calling Groq API...');
+    // Call Groq API
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Liệt kê các chỉ số trong máy đo huyết áp/nhịp tim. Trả về kết quả dưới dạng JSON với format chính xác như sau:\n{\n  "huyet_ap_tam_thu": "số lượng mmHg",\n  "huyet_ap_tam_truong": "số lượng mmHg",\n  "nhip_tim": "số lượng bpm"\n}\n\nChỉ trả về JSON, không có text khác.' },
+            { type: 'image_url', image_url: { url: imageUrl } }
+          ]
+        }
+      ],
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      temperature: 0.1,
+      max_completion_tokens: 1024,
+      top_p: 1,
+      stream: false,
+      stop: null
+    });
+    console.log('✅ Groq API response received');
+    
+    // Parse JSON response
+    try {
+      const jsonResponse = JSON.parse(chatCompletion.choices[0].message.content);
+      console.log('✅ Parsed JSON response:', jsonResponse);
+      res.json({ 
+        success: true,
+        data: jsonResponse,
+        raw: chatCompletion.choices[0].message.content 
+      });
+    } catch (parseError) {
+      console.log('⚠️ Failed to parse JSON, returning raw response');
+      res.json({ 
+        success: false,
+        raw: chatCompletion.choices[0].message.content,
+        error: 'Could not parse JSON response'
+      });
+    }
+  } catch (err) {
+    console.error('❌ Groq image chat error:', err);
+    console.error('❌ Error stack:', err.stack);
+    
+    // Handle specific Groq API errors
+    if (err.status === 401) {
+      return res.status(401).json({ 
+        error: 'Invalid API key. Please check your Groq API key.',
+        details: 'Make sure your API key is correct and has sufficient credits.'
+      });
+    } else if (err.status === 429) {
+      return res.status(429).json({ 
+        error: 'Rate limit exceeded. Please try again later.',
+        details: 'You have exceeded the API rate limit.'
+      });
+    } else if (err.status === 400) {
+      return res.status(400).json({ 
+        error: 'Bad request to Groq API.',
+        details: err.message
+      });
+    }
+    
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
 });
 
 // 6. Khởi động server
