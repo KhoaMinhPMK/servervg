@@ -206,3 +206,7 @@ server.listen(PORT, '0.0.0.0', () => {
   debugServer(`Server đang lắng nghe trên http://0.0.0.0:${PORT}`);
   debugServer('Bạn có thể truy cập từ các thiết bị khác trong cùng mạng!');
 });
+
+
+
+// tốt rồi nó đã hoạt động, bây giờ chỉ trao đổi thôi, không code, hãy cho tôi biết tôi muốn theo kiểu nhắn qua, cho dù người kia đang không online thì khi họ mở lên họ vẫn xem được thì làm như nào, tức là bổ sung thêm chứ không phải thayu thế chức năng nha
