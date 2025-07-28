@@ -23,6 +23,8 @@
   <div class="container">
     <h2>🖼️ Groq Image Chat</h2>
     <form id="groqForm">
+      <label for="apiKey">🔑 Nhập Groq API Key</label>
+      <input type="password" id="apiKey" name="apiKey" placeholder="gsk_..." required>
       <label for="image">1️⃣ Chọn hình ảnh (JPG, PNG...)</label>
       <input type="file" id="image" name="image" accept="image/*" required>
       <img id="preview" class="preview-img" style="display:none;" />
@@ -64,6 +66,7 @@
       loadingDiv.style.display = 'block';
       loadingDiv.textContent = '⏳ Đang xử lý...';
       const formData = new FormData();
+      formData.append('apiKey', document.getElementById('apiKey').value);
       formData.append('image', imageInput.files[0]);
       formData.append('prompt', promptInput.value);
       try {
