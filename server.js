@@ -47,6 +47,7 @@ io.on('connection', (socket) => {
       }
     }
   });
+  
 
   socket.on('disconnect', () => {
     // Xóa user khỏi map khi họ ngắt kết nối
@@ -211,7 +212,6 @@ const multer = require('multer');
 const upload = multer({ dest: 'uploads/' });
 const fs = require('fs');
 const Groq = require('groq-sdk');
-const groq = new Groq();
 
 app.post('/api/groq-image-chat', upload.single('image'), async (req, res) => {
   try {
