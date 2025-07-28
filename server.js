@@ -232,6 +232,12 @@ app.post('/api/groq-image-chat', upload.single('image'), async (req, res) => {
       return res.status(400).json({ error: 'Missing prompt, image, or API key' });
     }
     
+    // Validate API key format
+    if (!apiKey.startsWith('gsk_')) {
+      console.log('❌ Invalid API key format - should start with gsk_');
+      return res.status(400).json({ error: 'Invalid API key format. Should start with gsk_' });
+    }
+    
     console.log('🔄 Converting image to base64...');
     // Convert image to base64 URL
     const imageBuffer = fs.readFileSync(imageFile.path);
@@ -274,6 +280,25 @@ app.post('/api/groq-image-chat', upload.single('image'), async (req, res) => {
   } catch (err) {
     console.error('❌ Groq image chat error:', err);
     console.error('❌ Error stack:', err.stack);
+    
+    // Handle specific Groq API errors
+    if (err.status === 401) {
+      return res.status(401).json({ 
+        error: 'Invalid API key. Please check your Groq API key.',
+        details: 'Make sure your API key is correct and has sufficient credits.'
+      });
+    } else if (err.status === 429) {
+      return res.status(429).json({ 
+        error: 'Rate limit exceeded. Please try again later.',
+        details: 'You have exceeded the API rate limit.'
+      });
+    } else if (err.status === 400) {
+      return res.status(400).json({ 
+        error: 'Bad request to Groq API.',
+        details: err.message
+      });
+    }
+    
     res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });

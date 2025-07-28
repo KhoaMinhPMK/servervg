@@ -80,7 +80,11 @@
           resultDiv.textContent = data.result;
           resultDiv.style.display = 'block';
         } else {
-          errorDiv.textContent = data.error || 'Có lỗi xảy ra.';
+          let errorMessage = data.error || 'Có lỗi xảy ra.';
+          if (data.details) {
+            errorMessage += '\n\nChi tiết: ' + data.details;
+          }
+          errorDiv.textContent = errorMessage;
           errorDiv.style.display = 'block';
         }
       } catch (err) {
