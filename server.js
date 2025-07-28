@@ -12,7 +12,8 @@ const debugSocket = require('debug')('app:socket');
 // 2. Khởi tạo
 const app = express();
 app.use(cors());
-app.use(express.json()); // <-- Thêm middleware để parse JSON body từ PHP
+// Tăng limit cho JSON body để xử lý ảnh base64 lớn
+app.use(express.json({ limit: '10mb' })); // <-- Tăng limit lên 10MB
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -209,7 +210,13 @@ app.get('/groq-image-chat', (req, res) => {
 
 // 8. API endpoint for Groq image+prompt chat (FormData for web)
 const multer = require('multer');
-const upload = multer({ dest: 'uploads/' });
+// Tăng limit cho file upload để xử lý ảnh lớn
+const upload = multer({ 
+  dest: 'uploads/',
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  }
+});
 const fs = require('fs');
 const Groq = require('groq-sdk');
 
