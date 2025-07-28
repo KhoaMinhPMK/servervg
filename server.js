@@ -227,9 +227,9 @@ app.post('/api/groq-image-chat', upload.single('image'), async (req, res) => {
     console.log('✅ API Key length:', apiKey ? apiKey.length : 0);
     console.log('✅ Image file:', imageFile ? 'Present' : 'Missing');
     
-    if (!prompt || !imageFile || !apiKey) {
+    if (!imageFile || !apiKey) {
       console.log('❌ Validation failed - missing required fields');
-      return res.status(400).json({ error: 'Missing prompt, image, or API key' });
+      return res.status(400).json({ error: 'Missing image or API key' });
     }
     
     // Validate API key format
