@@ -258,13 +258,13 @@ app.post('/api/groq-image-chat', upload.single('image'), async (req, res) => {
         {
           role: 'user',
           content: [
-            { type: 'text', text: prompt },
+            { type: 'text', text: 'Liệt kê các chỉ số trong máy đo huyết áp/nhịp tim. Trả về kết quả dưới dạng JSON với format chính xác như sau:\n{\n  "huyet_ap_tam_thu": "số lượng mmHg",\n  "huyet_ap_tam_truong": "số lượng mmHg",\n  "nhip_tim": "số lượng bpm"\n}\n\nChỉ trả về JSON, không có text khác.' },
             { type: 'image_url', image_url: { url: imageUrl } }
           ]
         }
       ],
       model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-      temperature: 1,
+      temperature: 0.1,
       max_completion_tokens: 1024,
       top_p: 1,
       stream: false,
@@ -276,7 +276,23 @@ app.post('/api/groq-image-chat', upload.single('image'), async (req, res) => {
     fs.unlinkSync(imageFile.path);
     console.log('✅ File cleaned up');
     
-    res.json({ result: chatCompletion.choices[0].message.content });
+    // Parse JSON response
+    try {
+      const jsonResponse = JSON.parse(chatCompletion.choices[0].message.content);
+      console.log('✅ Parsed JSON response:', jsonResponse);
+      res.json({ 
+        success: true,
+        data: jsonResponse,
+        raw: chatCompletion.choices[0].message.content 
+      });
+    } catch (parseError) {
+      console.log('⚠️ Failed to parse JSON, returning raw response');
+      res.json({ 
+        success: false,
+        raw: chatCompletion.choices[0].message.content,
+        error: 'Could not parse JSON response'
+      });
+    }
   } catch (err) {
     console.error('❌ Groq image chat error:', err);
     console.error('❌ Error stack:', err.stack);

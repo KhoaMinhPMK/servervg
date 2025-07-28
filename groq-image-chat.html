@@ -2,14 +2,14 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <title>Groq Image Chat</title>
+  <title>Đọc Chỉ Số Y Tế</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f7f7fa; margin: 0; padding: 0; }
     .container { max-width: 420px; margin: 40px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 16px rgba(0,0,0,0.08); padding: 32px 24px; }
     h2 { margin-top: 0; color: #222; }
     label { display: block; margin-bottom: 8px; font-weight: 500; }
     input[type="file"] { margin-bottom: 16px; }
-    input[type="text"], textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 16px; font-size: 16px; }
+    input[type="text"], input[type="password"] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 16px; font-size: 16px; }
     button { background: #007bff; color: #fff; border: none; padding: 12px 24px; border-radius: 6px; font-size: 16px; cursor: pointer; transition: background 0.2s; }
     button:disabled { background: #b3d1ff; cursor: not-allowed; }
     .result, .error { margin-top: 24px; padding: 16px; border-radius: 8px; font-size: 16px; }
@@ -17,33 +17,56 @@
     .error { background: #ffeaea; color: #c00; }
     .loading { color: #007bff; margin-top: 16px; }
     .preview-img { max-width: 100%; max-height: 180px; display: block; margin: 0 auto 16px auto; border-radius: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.07); }
+    .result-fields { margin-top: 24px; }
+    .result-field { margin-bottom: 16px; }
+    .result-field label { font-weight: 600; color: #333; }
+    .result-field input { background: #f8f9fa; border: 2px solid #e9ecef; }
+    .result-field input:focus { border-color: #007bff; outline: none; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h2>🖼️ Groq Image Chat</h2>
+    <h2>🏥 Đọc Chỉ Số Y Tế</h2>
     <form id="groqForm">
       <label for="apiKey">🔑 Nhập Groq API Key</label>
       <input type="password" id="apiKey" name="apiKey" placeholder="gsk_..." required>
-      <label for="image">1️⃣ Chọn hình ảnh (JPG, PNG...)</label>
+      <label for="image">📷 Chụp ảnh máy đo huyết áp/nhịp tim</label>
       <input type="file" id="image" name="image" accept="image/*" required>
       <img id="preview" class="preview-img" style="display:none;" />
-      <label for="prompt">2️⃣ Nhập câu hỏi hoặc mô tả (prompt)</label>
-      <input type="text" id="prompt" name="prompt" placeholder="Ví dụ: Hình này là gì?" required>
-      <button type="submit">Gửi & Nhận kết quả</button>
+      <button type="submit">🔍 Đọc Chỉ Số</button>
     </form>
-    <div id="loading" class="loading" style="display:none;">⏳ Đang xử lý...</div>
+    
+    <div id="loading" class="loading" style="display:none;">⏳ Đang phân tích ảnh...</div>
+    
+    <div class="result-fields" id="resultFields" style="display:none;">
+      <div class="result-field">
+        <label for="systolic">💓 Huyết áp tâm thu (mmHg)</label>
+        <input type="text" id="systolic" readonly>
+      </div>
+      <div class="result-field">
+        <label for="diastolic">💔 Huyết áp tâm trương (mmHg)</label>
+        <input type="text" id="diastolic" readonly>
+      </div>
+      <div class="result-field">
+        <label for="heartRate">❤️ Nhịp tim (bpm)</label>
+        <input type="text" id="heartRate" readonly>
+      </div>
+    </div>
+    
     <div id="result" class="result" style="display:none;"></div>
     <div id="error" class="error" style="display:none;"></div>
   </div>
   <script>
     const form = document.getElementById('groqForm');
     const imageInput = document.getElementById('image');
-    const promptInput = document.getElementById('prompt');
     const resultDiv = document.getElementById('result');
     const errorDiv = document.getElementById('error');
     const loadingDiv = document.getElementById('loading');
     const previewImg = document.getElementById('preview');
+    const resultFields = document.getElementById('resultFields');
+    const systolicInput = document.getElementById('systolic');
+    const diastolicInput = document.getElementById('diastolic');
+    const heartRateInput = document.getElementById('heartRate');
 
     imageInput.addEventListener('change', function() {
       const file = imageInput.files[0];
@@ -63,12 +86,14 @@
       e.preventDefault();
       resultDiv.style.display = 'none';
       errorDiv.style.display = 'none';
+      resultFields.style.display = 'none';
       loadingDiv.style.display = 'block';
-      loadingDiv.textContent = '⏳ Đang xử lý...';
+      loadingDiv.textContent = '⏳ Đang phân tích ảnh...';
+      
       const formData = new FormData();
       formData.append('apiKey', document.getElementById('apiKey').value);
       formData.append('image', imageInput.files[0]);
-      formData.append('prompt', promptInput.value);
+      
       try {
         const res = await fetch('/api/groq-image-chat', {
           method: 'POST',
@@ -76,9 +101,13 @@
         });
         const data = await res.json();
         loadingDiv.style.display = 'none';
-        if (res.ok) {
-          resultDiv.textContent = data.result;
-          resultDiv.style.display = 'block';
+        
+        if (res.ok && data.success) {
+          // Populate result fields
+          systolicInput.value = data.data.huyet_ap_tam_thu || 'N/A';
+          diastolicInput.value = data.data.huyet_ap_tam_truong || 'N/A';
+          heartRateInput.value = data.data.nhip_tim || 'N/A';
+          resultFields.style.display = 'block';
         } else {
           let errorMessage = data.error || 'Có lỗi xảy ra.';
           if (data.details) {
