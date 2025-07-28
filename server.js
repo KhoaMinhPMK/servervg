@@ -217,14 +217,18 @@ app.post('/api/groq-image-chat', upload.single('image'), async (req, res) => {
   try {
     const prompt = req.body.prompt;
     const imageFile = req.file;
-    if (!prompt || !imageFile) {
-      return res.status(400).json({ error: 'Missing prompt or image' });
+    const apiKey = req.body.apiKey;
+    if (!prompt || !imageFile || !apiKey) {
+      return res.status(400).json({ error: 'Missing prompt, image, or API key' });
     }
     // Convert image to base64 URL
     const imageBuffer = fs.readFileSync(imageFile.path);
     const base64 = imageBuffer.toString('base64');
     const mimeType = imageFile.mimetype;
     const imageUrl = `data:${mimeType};base64,${base64}`;
+
+    // Create Groq client with user's API key
+    const groq = new Groq({ apiKey: apiKey });
 
     // Call Groq API
     const chatCompletion = await groq.chat.completions.create({
