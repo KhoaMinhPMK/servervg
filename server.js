@@ -198,6 +198,45 @@ app.post('/notify', (req, res) => {
   }
 });
 
+// 5. Endpoint để PHP gửi tin nhắn đến socket server
+app.post('/send-message', (req, res) => {
+  const { sender_phone, receiver_phone, message_text, conversation_id, message_id, timestamp, secret } = req.body;
+
+  debugServer('Nhận được yêu cầu gửi tin nhắn:', req.body);
+
+  // Bảo mật cơ bản
+  if (secret !== NOTIFY_SECRET) {
+    debugServer('Lỗi: Sai secret key.');
+    return res.status(403).json({ success: false, error: 'Forbidden' });
+  }
+
+  if (!sender_phone || !receiver_phone || !message_text) {
+    debugServer('Lỗi: Thiếu thông tin tin nhắn.');
+    return res.status(400).json({ success: false, error: 'Missing message information' });
+  }
+
+  // Tạo tin nhắn để gửi qua socket
+  const messageData = {
+    conversationId: conversation_id,
+    sender: sender_phone,
+    receiver: receiver_phone,
+    message: message_text,
+    messageId: message_id,
+    timestamp: timestamp || new Date().toISOString()
+  };
+
+  // Gửi tin nhắn đến receiver qua socket
+  const receiverSocketId = userSockets[receiver_phone];
+  if (receiverSocketId) {
+    io.to(receiverSocketId).emit('chat message', messageData);
+    debugServer(`📱 Tin nhắn real-time đã gửi cho ${receiver_phone} (socket: ${receiverSocketId})`);
+    res.json({ success: true, message: `Message sent to ${receiver_phone}`, delivered: true });
+  } else {
+    debugServer(`💾 User ${receiver_phone} offline, tin nhắn đã lưu DB để xem sau`);
+    res.json({ success: true, message: `User ${receiver_phone} offline, message stored`, delivered: false });
+  }
+});
+
 // 5. Phục vụ file index.html
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
