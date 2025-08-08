@@ -103,43 +103,20 @@ io.on('connection', (socket) => {
 
   // Event cũ - giữ lại để tương thích
   socket.on('chat message', (msg) => {
-    console.log('🔍 Server received chat message:', msg);
+    console.log('🔍 Server received chat message (legacy):', msg);
     
+    // Ngăn chặn broadcast toàn hệ thống để tránh rò tin nhắn giữa các hội thoại/người dùng
+    // Chỉ chấp nhận kênh chính thức qua REST POST /send-message (đã có định tuyến người nhận)
     if (typeof msg === 'string') {
-      // Tin nhắn đơn giản
-      debugSocket(`Tin nhắn từ ${socket.id}: ${msg}`);
-      io.emit('chat message', msg);
-    } else {
-      // Tin nhắn có cấu trúc từ web
-      const { sender, message, timestamp, message_type, file_url } = msg;
-      debugSocket(`Tin nhắn từ ${sender}: ${message}`);
-      
-      // Gửi tin nhắn đến app (0000000001)
-      const appSocketId = userSockets['0000000001'];
-      console.log('🔍 Looking for app socket:', '0000000001');
-      console.log('📋 Available users:', Object.keys(userSockets));
-      
-      if (appSocketId) {
-        const messageData = {
-          conversationId: 'conv_1fd7e09c6c647f98a9aaabed96b60327',
-          sender: sender,
-          receiver: '0000000001',
-          message: message,
-          message_type: message_type || 'text',
-          file_url: file_url || null,
-          timestamp: timestamp
-        };
-        
-        console.log('📤 Sending to app socket:', appSocketId);
-        console.log('📤 Message data:', messageData);
-        io.to(appSocketId).emit('chat message', messageData);
-        console.log('✅ Message sent from web to app');
-        
-        // Không broadcast để tránh duplicate
-      } else {
-        console.log('❌ App socket not found');
-      }
+      // Trước đây: io.emit('chat message', msg)
+      console.log('⏭️ Ignored legacy string message to avoid global broadcast');
+      return;
     }
+
+    // Nếu là object từ web test, cũng bỏ qua để không gửi nhầm
+    // (kênh chính thức là /send-message từ PHP để đảm bảo có receiver_phone)
+    console.log('⏭️ Ignored legacy object message; use /send-message instead');
+    return;
   });
 
   // Event mới - Join conversation room
