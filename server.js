@@ -29,6 +29,46 @@ const NOTIFY_SECRET = 'viegrand_super_secret_key_for_php_2025'; // <-- Secret ke
 // Lưu trữ map giữa user phone và socket id
 const userSockets = {};
 
+// Ensure uploads directories exist
+const fs = require('fs');
+const uploadsRoot = path.join(__dirname, 'uploads');
+const chatUploadsDir = path.join(uploadsRoot, 'chat');
+try {
+  if (!fs.existsSync(uploadsRoot)) fs.mkdirSync(uploadsRoot, { recursive: true });
+  if (!fs.existsSync(chatUploadsDir)) fs.mkdirSync(chatUploadsDir, { recursive: true });
+} catch (e) {
+  debugServer('Failed to ensure upload directories:', e);
+}
+
+// Serve static uploads
+app.use('/uploads', express.static(uploadsRoot));
+
+// Multer for uploads
+const multer = require('multer');
+const chatStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, chatUploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = (file.mimetype && file.mimetype.split('/')[1]) || 'jpg';
+    const safeExt = ext.split('?')[0].split(';')[0];
+    const random = Math.random().toString(36).slice(2, 10);
+    cb(null, `chat_${Date.now()}_${random}.${safeExt}`);
+  }
+});
+
+function imageFileFilter(req, file, cb) {
+  const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+  if (allowed.includes(file.mimetype)) cb(null, true);
+  else cb(new Error('Unsupported file type'), false);
+}
+
+const chatUpload = multer({
+  storage: chatStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: imageFileFilter,
+});
+
 // 3. Lắng nghe các sự kiện của Socket.IO
 io.on('connection', (socket) => {
   debugSocket(`Một người dùng đã kết nối: ${socket.id}`);
@@ -71,7 +111,7 @@ io.on('connection', (socket) => {
       io.emit('chat message', msg);
     } else {
       // Tin nhắn có cấu trúc từ web
-      const { sender, message, timestamp } = msg;
+      const { sender, message, timestamp, message_type, file_url } = msg;
       debugSocket(`Tin nhắn từ ${sender}: ${message}`);
       
       // Gửi tin nhắn đến app (0000000001)
@@ -85,6 +125,8 @@ io.on('connection', (socket) => {
           sender: sender,
           receiver: '0000000001',
           message: message,
+          message_type: message_type || 'text',
+          file_url: file_url || null,
           timestamp: timestamp
         };
         
@@ -114,13 +156,15 @@ io.on('connection', (socket) => {
   socket.on('send message', (data) => {
     console.log('🔍 Server received send message data:', data);
     
-    const { conversationId, senderPhone, receiverPhone, messageText, timestamp } = data;
+    const { conversationId, senderPhone, receiverPhone, messageText, timestamp, messageType, fileUrl } = data;
     
     debugSocket(`Send message from ${senderPhone} to ${receiverPhone}:`, {
       conversationId,
       sender: senderPhone,
       receiver: receiverPhone,
-      message: messageText
+      message: messageText,
+      messageType,
+      fileUrl
     });
 
     // Tạo tin nhắn để gửi
@@ -129,22 +173,24 @@ io.on('connection', (socket) => {
       sender: senderPhone,
       receiver: receiverPhone,
       message: messageText,
+      message_type: messageType || 'text',
+      file_url: fileUrl || null,
       timestamp: timestamp || new Date().toISOString()
     };
 
-          // Gửi tin nhắn trực tiếp đến receiver
-      const receiverSocketId = userSockets[receiverPhone];
-      console.log('🔍 Looking for receiver:', receiverPhone);
-      console.log('📋 Available users:', Object.keys(userSockets));
-      
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit('chat message', messageData);
-        debugSocket(`Message sent to ${receiverPhone} (socket: ${receiverSocketId})`);
-        console.log('✅ Message sent to receiver');
-      } else {
-        debugSocket(`Receiver ${receiverPhone} not found in userSockets`);
-        console.log('❌ Receiver not found in userSockets');
-      }
+    // Gửi tin nhắn trực tiếp đến receiver
+    const receiverSocketId = userSockets[receiverPhone];
+    console.log('🔍 Looking for receiver:', receiverPhone);
+    console.log('📋 Available users:', Object.keys(userSockets));
+    
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit('chat message', messageData);
+      debugSocket(`Message sent to ${receiverPhone} (socket: ${receiverSocketId})`);
+      console.log('✅ Message sent to receiver');
+    } else {
+      debugSocket(`Receiver ${receiverPhone} not found in userSockets`);
+      console.log('❌ Receiver not found in userSockets');
+    }
 
     // Không emit cho conversation room để tránh duplicate
     // Chỉ gửi trực tiếp đến receiver
@@ -198,9 +244,34 @@ app.post('/notify', (req, res) => {
   }
 });
 
+// 5. Endpoint upload ảnh chat (multipart)
+app.post('/upload/chat-image', chatUpload.single('image'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No image uploaded' });
+    }
+
+    // Build public URL
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/chat/${req.file.filename}`;
+
+    return res.json({
+      success: true,
+      data: {
+        url: fileUrl,
+        filename: req.file.originalname,
+        size: req.file.size,
+        mimeType: req.file.mimetype,
+      }
+    });
+  } catch (err) {
+    console.error('❌ Upload chat image error:', err);
+    return res.status(500).json({ success: false, message: 'Upload failed' });
+  }
+});
+
 // 5. Endpoint để PHP gửi tin nhắn đến socket server
 app.post('/send-message', (req, res) => {
-  const { sender_phone, receiver_phone, message_text, conversation_id, message_id, timestamp, secret } = req.body;
+  const { sender_phone, receiver_phone, message_text, conversation_id, message_id, timestamp, secret, message_type, file_url } = req.body;
 
   debugServer('Nhận được yêu cầu gửi tin nhắn:', req.body);
 
@@ -210,7 +281,7 @@ app.post('/send-message', (req, res) => {
     return res.status(403).json({ success: false, error: 'Forbidden' });
   }
 
-  if (!sender_phone || !receiver_phone || !message_text) {
+  if (!sender_phone || !receiver_phone || (!message_text && !file_url)) {
     debugServer('Lỗi: Thiếu thông tin tin nhắn.');
     return res.status(400).json({ success: false, error: 'Missing message information' });
   }
@@ -220,7 +291,9 @@ app.post('/send-message', (req, res) => {
     conversationId: conversation_id,
     sender: sender_phone,
     receiver: receiver_phone,
-    message: message_text,
+    message: message_text || '',
+    message_type: message_type || (file_url ? 'image' : 'text'),
+    file_url: file_url || null,
     messageId: message_id,
     timestamp: timestamp || new Date().toISOString()
   };
@@ -248,15 +321,13 @@ app.get('/groq-image-chat', (req, res) => {
 });
 
 // 8. API endpoint for Groq image+prompt chat (FormData for web)
-const multer = require('multer');
-// Tăng limit cho file upload để xử lý ảnh lớn
 const upload = multer({ 
   dest: 'uploads/',
   limits: {
     fileSize: 10 * 1024 * 1024 // 10MB limit
   }
 });
-const fs = require('fs');
+const fsGroq = require('fs');
 const Groq = require('groq-sdk');
 
 app.post('/api/groq-image-chat', upload.single('image'), async (req, res) => {
@@ -286,7 +357,7 @@ app.post('/api/groq-image-chat', upload.single('image'), async (req, res) => {
     
     console.log('🔄 Converting image to base64...');
     // Convert image to base64 URL
-    const imageBuffer = fs.readFileSync(imageFile.path);
+    const imageBuffer = fsGroq.readFileSync(imageFile.path);
     const base64 = imageBuffer.toString('base64');
     const mimeType = imageFile.mimetype;
     const imageUrl = `data:${mimeType};base64,${base64}`;
@@ -319,7 +390,7 @@ app.post('/api/groq-image-chat', upload.single('image'), async (req, res) => {
     console.log('✅ Groq API response received');
     
     // Clean up uploaded file
-    fs.unlinkSync(imageFile.path);
+    fsGroq.unlinkSync(imageFile.path);
     console.log('✅ File cleaned up');
     
     // Parse JSON response
@@ -457,6 +528,54 @@ app.post('/api/groq-image-chat-json', async (req, res) => {
     }
     
     res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+});
+
+// 9. GPT-OSS Ollama Integration
+app.post('/api/gpt-oss-chat', async (req, res) => {
+  try {
+    console.log('🔍 Received GPT-OSS chat request');
+    const { message, system_prompt } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Missing message' });
+    }
+    
+    console.log('💬 Message:', message);
+    console.log('🎯 System prompt:', system_prompt || 'Default');
+    
+    // Call GPT-OSS Ollama server
+    const response = await fetch('http://localhost:8888/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: message,
+        system_prompt: system_prompt || "Bạn là trợ lý AI thông minh, trả lời bằng tiếng Việt."
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`GPT-OSS server error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    console.log('✅ GPT-OSS response received');
+    
+    res.json({
+      success: true,
+      response: result.response,
+      model: result.model || 'gpt-oss:20b',
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ GPT-OSS chat error:', error);
+    res.status(500).json({
+      error: 'Failed to get response from GPT-OSS',
+      details: error.message
+    });
   }
 });
 
