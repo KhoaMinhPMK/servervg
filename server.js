@@ -26,8 +26,43 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 const NOTIFY_SECRET = 'viegrand_super_secret_key_for_php_2025'; // <-- Secret key để PHP gọi
 
-// Lưu trữ map giữa user phone và socket id
-const userSockets = {};
+// Lưu trữ map giữa user phone và DANH SÁCH socket id (đa thiết bị/đa kết nối)
+// Map<string, Set<string>>
+const userSockets = new Map();
+
+function addUserSocket(phone, socketId) {
+  if (!phone || !socketId) return;
+  const key = String(phone);
+  if (!userSockets.has(key)) userSockets.set(key, new Set());
+  userSockets.get(key).add(socketId);
+  debugSocket(`➕ Mapped phone ${key} -> socket ${socketId}. Total sockets: ${userSockets.get(key).size}`);
+}
+
+function removeUserSocketById(socketId) {
+  for (const [phone, socketSet] of userSockets.entries()) {
+    if (socketSet.has(socketId)) {
+      socketSet.delete(socketId);
+      debugSocket(`➖ Removed socket ${socketId} from phone ${phone}. Remaining: ${socketSet.size}`);
+      if (socketSet.size === 0) {
+        userSockets.delete(phone);
+        debugSocket(`🗑️ No sockets left for ${phone}, deleted mapping`);
+      }
+      return phone;
+    }
+  }
+  return null;
+}
+
+function getSocketIdsForPhone(phone) {
+  const set = userSockets.get(String(phone));
+  return set ? Array.from(set) : [];
+}
+
+function dumpUserSockets() {
+  const obj = {};
+  for (const [phone, set] of userSockets.entries()) obj[phone] = Array.from(set);
+  return obj;
+}
 
 // Ensure uploads directories exist
 const fs = require('fs');
@@ -73,53 +108,45 @@ const chatUpload = multer({
 io.on('connection', (socket) => {
   debugSocket(`Một người dùng đã kết nối: ${socket.id}`);
 
-  // Sự kiện đăng ký user với SĐT
+  // Auto-register qua handshake auth hoặc query (?phone=...)
+  try {
+    const phoneFromAuth = socket.handshake?.auth?.phone;
+    const phoneFromQuery = socket.handshake?.query?.phone;
+    const initialPhone = phoneFromAuth || phoneFromQuery;
+    if (initialPhone) {
+      addUserSocket(initialPhone, socket.id);
+      console.log('📋 Current userSockets:', dumpUserSockets());
+    }
+  } catch (e) {
+    debugSocket('Handshake parse error:', e);
+  }
+
+  // Sự kiện đăng ký user với SĐT (backward compatibility)
   socket.on('register', (phone) => {
     console.log('🔍 Server received register:', phone, typeof phone);
-    
-    if (phone) {
-      // Xử lý cả object và string
-      const phoneNumber = typeof phone === 'object' ? phone.phone : phone;
-      
-      if (phoneNumber) {
-        userSockets[phoneNumber] = socket.id;
-        debugSocket(`Người dùng với SĐT ${phoneNumber} đã đăng ký với socket id ${socket.id}`);
-        console.log('📋 Current userSockets:', userSockets);
-      }
+    const phoneNumber = typeof phone === 'object' ? phone?.phone : phone;
+    if (phoneNumber) {
+      addUserSocket(phoneNumber, socket.id);
+      console.log('📋 Current userSockets:', dumpUserSockets());
     }
   });
   
-
   socket.on('disconnect', () => {
-    // Xóa user khỏi map khi họ ngắt kết nối
-    for (const phone in userSockets) {
-      if (userSockets[phone] === socket.id) {
-        delete userSockets[phone];
-        debugSocket(`Người dùng với SĐT ${phone} đã ngắt kết nối: ${socket.id}`);
-        break;
-      }
-    }
+    const phone = removeUserSocketById(socket.id);
+    debugSocket(`Người dùng ngắt kết nối: ${socket.id}${phone ? ` (phone ${phone})` : ''}`);
   });
 
   // Event cũ - giữ lại để tương thích
   socket.on('chat message', (msg) => {
     console.log('🔍 Server received chat message:', msg);
-    
     if (typeof msg === 'string') {
-      // Tin nhắn đơn giản
       debugSocket(`Tin nhắn từ ${socket.id}: ${msg}`);
       io.emit('chat message', msg);
     } else {
-      // Tin nhắn có cấu trúc từ web
       const { sender, message, timestamp, message_type, file_url } = msg;
       debugSocket(`Tin nhắn từ ${sender}: ${message}`);
-      
-      // Gửi tin nhắn đến app (0000000001)
-      const appSocketId = userSockets['0000000001'];
-      console.log('🔍 Looking for app socket:', '0000000001');
-      console.log('📋 Available users:', Object.keys(userSockets));
-      
-      if (appSocketId) {
+      const appSocketIds = getSocketIdsForPhone('0000000001');
+      if (appSocketIds.length > 0) {
         const messageData = {
           conversationId: 'conv_1fd7e09c6c647f98a9aaabed96b60327',
           sender: sender,
@@ -129,45 +156,24 @@ io.on('connection', (socket) => {
           file_url: file_url || null,
           timestamp: timestamp
         };
-        
-        console.log('📤 Sending to app socket:', appSocketId);
-        console.log('📤 Message data:', messageData);
-        io.to(appSocketId).emit('chat message', messageData);
-        console.log('✅ Message sent from web to app');
-        
-        // Không broadcast để tránh duplicate
-      } else {
-        console.log('❌ App socket not found');
+        appSocketIds.forEach(id => io.to(id).emit('chat message', messageData));
       }
     }
   });
 
   // Event mới - Join conversation room
   socket.on('join conversation', (data) => {
-    const { conversation_id } = data;
+    const { conversation_id } = data || {};
     if (conversation_id) {
       socket.join(conversation_id);
       debugSocket(`User ${socket.id} joined conversation: ${conversation_id}`);
-      console.log('🔗 User joined conversation room:', conversation_id);
     }
   });
 
   // Event mới - Send message trong conversation
   socket.on('send message', (data) => {
     console.log('🔍 Server received send message data:', data);
-    
-    const { conversationId, senderPhone, receiverPhone, messageText, timestamp, messageType, fileUrl } = data;
-    
-    debugSocket(`Send message from ${senderPhone} to ${receiverPhone}:`, {
-      conversationId,
-      sender: senderPhone,
-      receiver: receiverPhone,
-      message: messageText,
-      messageType,
-      fileUrl
-    });
-
-    // Tạo tin nhắn để gửi
+    const { conversationId, senderPhone, receiverPhone, messageText, timestamp, messageType, fileUrl } = data || {};
     const messageData = {
       conversationId,
       sender: senderPhone,
@@ -178,35 +184,20 @@ io.on('connection', (socket) => {
       timestamp: timestamp || new Date().toISOString()
     };
 
-    // Gửi tin nhắn trực tiếp đến receiver
-    const receiverSocketId = userSockets[receiverPhone];
-    console.log('🔍 Looking for receiver:', receiverPhone);
-    console.log('📋 Available users:', Object.keys(userSockets));
-    
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit('chat message', messageData);
-      debugSocket(`Message sent to ${receiverPhone} (socket: ${receiverSocketId})`);
-      console.log('✅ Message sent to receiver');
+    const receiverSocketIds = getSocketIdsForPhone(receiverPhone);
+    console.log('🔍 Looking for receiver:', receiverPhone, '->', receiverSocketIds);
+    if (receiverSocketIds.length > 0) {
+      receiverSocketIds.forEach(id => io.to(id).emit('chat message', messageData));
+      debugSocket(`Message sent to ${receiverPhone} (sockets: ${receiverSocketIds.join(',')})`);
     } else {
       debugSocket(`Receiver ${receiverPhone} not found in userSockets`);
-      console.log('❌ Receiver not found in userSockets');
     }
-
-    // Không emit cho conversation room để tránh duplicate
-    // Chỉ gửi trực tiếp đến receiver
   });
 
   // Event mới - Mark message as read
   socket.on('mark message read', (data) => {
-    const { conversation_id, message_id, user_phone } = data;
-    
-    debugSocket(`Mark message as read:`, {
-      conversation_id,
-      message_id,
-      user_phone
-    });
-
-    // Emit cho tất cả người trong conversation
+    const { conversation_id, message_id, user_phone } = data || {};
+    debugSocket(`Mark message as read:`, { conversation_id, message_id, user_phone });
     socket.to(conversation_id).emit('message read', {
       conversation_id,
       message_id,
@@ -219,50 +210,26 @@ io.on('connection', (socket) => {
 // 4. Endpoint để PHP gọi đến và kích hoạt thông báo
 app.post('/notify', (req, res) => {
   const { to_phone, payload, secret } = req.body;
-
   debugServer('Nhận được yêu cầu thông báo:', req.body);
-
-  // Bảo mật cơ bản
-  if (secret !== NOTIFY_SECRET) {
-    debugServer('Lỗi: Sai secret key.');
-    return res.status(403).json({ success: false, error: 'Forbidden' });
-  }
-
-  if (!to_phone || !payload) {
-    debugServer('Lỗi: Thiếu to_phone hoặc payload.');
-    return res.status(400).json({ success: false, error: 'Missing to_phone or payload' });
-  }
-
-  const socketId = userSockets[to_phone];
-  if (socketId) {
-    io.to(socketId).emit('notification', payload);
-    debugServer(`📱 Thông báo real-time đã gửi cho ${to_phone} (socket: ${socketId})`);
-    res.json({ success: true, message: `Notification sent to ${to_phone}`, delivered: true });
+  if (secret !== NOTIFY_SECRET) return res.status(403).json({ success: false, error: 'Forbidden' });
+  if (!to_phone || !payload) return res.status(400).json({ success: false, error: 'Missing to_phone or payload' });
+  const socketIds = getSocketIdsForPhone(to_phone);
+  if (socketIds.length > 0) {
+    socketIds.forEach(id => io.to(id).emit('notification', payload));
+    debugServer(`📱 Thông báo đã gửi cho ${to_phone} (sockets: ${socketIds.join(',')})`);
+    res.json({ success: true, delivered: true });
   } else {
-    debugServer(`💾 User ${to_phone} offline, thông báo đã lưu DB để xem sau`);
-    res.json({ success: true, message: `User ${to_phone} offline, notification stored`, delivered: false });
+    debugServer(`💾 User ${to_phone} offline, stored`);
+    res.json({ success: true, delivered: false });
   }
 });
 
 // 5. Endpoint upload ảnh chat (multipart)
 app.post('/upload/chat-image', chatUpload.single('image'), (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: 'No image uploaded' });
-    }
-
-    // Build public URL
+    if (!req.file) return res.status(400).json({ success: false, message: 'No image uploaded' });
     const fileUrl = `${req.protocol}://${req.get('host')}/uploads/chat/${req.file.filename}`;
-
-    return res.json({
-      success: true,
-      data: {
-        url: fileUrl,
-        filename: req.file.originalname,
-        size: req.file.size,
-        mimeType: req.file.mimetype,
-      }
-    });
+    return res.json({ success: true, data: { url: fileUrl, filename: req.file.originalname, size: req.file.size, mimeType: req.file.mimetype }});
   } catch (err) {
     console.error('❌ Upload chat image error:', err);
     return res.status(500).json({ success: false, message: 'Upload failed' });
@@ -271,22 +238,11 @@ app.post('/upload/chat-image', chatUpload.single('image'), (req, res) => {
 
 // 5. Endpoint để PHP gửi tin nhắn đến socket server
 app.post('/send-message', (req, res) => {
-  const { sender_phone, receiver_phone, message_text, conversation_id, message_id, timestamp, secret, message_type, file_url } = req.body;
-
+  const { sender_phone, receiver_phone, message_text, conversation_id, message_id, timestamp, secret, message_type, file_url } = req.body || {};
   debugServer('Nhận được yêu cầu gửi tin nhắn:', req.body);
+  if (secret !== NOTIFY_SECRET) return res.status(403).json({ success: false, error: 'Forbidden' });
+  if (!sender_phone || !receiver_phone || (!message_text && !file_url)) return res.status(400).json({ success: false, error: 'Missing message information' });
 
-  // Bảo mật cơ bản
-  if (secret !== NOTIFY_SECRET) {
-    debugServer('Lỗi: Sai secret key.');
-    return res.status(403).json({ success: false, error: 'Forbidden' });
-  }
-
-  if (!sender_phone || !receiver_phone || (!message_text && !file_url)) {
-    debugServer('Lỗi: Thiếu thông tin tin nhắn.');
-    return res.status(400).json({ success: false, error: 'Missing message information' });
-  }
-
-  // Tạo tin nhắn để gửi qua socket
   const messageData = {
     conversationId: conversation_id,
     sender: sender_phone,
@@ -298,15 +254,14 @@ app.post('/send-message', (req, res) => {
     timestamp: timestamp || new Date().toISOString()
   };
 
-  // Gửi tin nhắn đến receiver qua socket
-  const receiverSocketId = userSockets[receiver_phone];
-  if (receiverSocketId) {
-    io.to(receiverSocketId).emit('chat message', messageData);
-    debugServer(`📱 Tin nhắn real-time đã gửi cho ${receiver_phone} (socket: ${receiverSocketId})`);
-    res.json({ success: true, message: `Message sent to ${receiver_phone}`, delivered: true });
+  const receiverSocketIds = getSocketIdsForPhone(receiver_phone);
+  if (receiverSocketIds.length > 0) {
+    receiverSocketIds.forEach(id => io.to(id).emit('chat message', messageData));
+    debugServer(`📱 Tin nhắn real-time đã gửi cho ${receiver_phone} (sockets: ${receiverSocketIds.join(',')})`);
+    res.json({ success: true, delivered: true });
   } else {
-    debugServer(`💾 User ${receiver_phone} offline, tin nhắn đã lưu DB để xem sau`);
-    res.json({ success: true, message: `User ${receiver_phone} offline, message stored`, delivered: false });
+    debugServer(`💾 User ${receiver_phone} offline, stored`);
+    res.json({ success: true, delivered: false });
   }
 });
 
@@ -323,9 +278,7 @@ app.get('/groq-image-chat', (req, res) => {
 // 8. API endpoint for Groq image+prompt chat (FormData for web)
 const upload = multer({ 
   dest: 'uploads/',
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  }
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 const fsGroq = require('fs');
 const Groq = require('groq-sdk');
